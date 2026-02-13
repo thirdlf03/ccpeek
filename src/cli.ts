@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 import { writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { Command } from 'commander';
 import chalk from 'chalk';
-import type { Scope } from './types.js';
+import type { ClaudeConfig, Scope } from './types.js';
 import { scanClaudeConfig } from './scanner.js';
 import { displayConfig, displaySummary, displaySettings } from './viewer.js';
 import { exportToJson, exportToMarkdown } from './exporter.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
 
 // ヘルパー関数
 function filterByScope<T extends { scope: 'global' | 'project' }>(items: T[], scope: Scope): T[] {
@@ -13,152 +17,171 @@ function filterByScope<T extends { scope: 'global' | 'project' }>(items: T[], sc
   return items.filter(item => item.scope === scope);
 }
 
+function filterConfigByScope(config: ClaudeConfig, scope: Scope): ClaudeConfig {
+  return {
+    agents: filterByScope(config.agents, scope),
+    skills: filterByScope(config.skills, scope),
+    rules: filterByScope(config.rules, scope),
+    globalSettings: (scope === 'all' || scope === 'global') ? config.globalSettings : undefined,
+    projectSettings: (scope === 'all' || scope === 'project') ? config.projectSettings : undefined,
+  };
+}
+
+function resolveOptions(command: Command): { scope: Scope; dir: string; json?: string | boolean; markdown?: string | boolean } {
+  const opts = command.optsWithGlobals();
+  const scope: Scope = opts.global ? 'global' : opts.project ? 'project' : 'all';
+  return { scope, dir: opts.dir, json: opts.json, markdown: opts.markdown };
+}
+
+function outputOrWrite(content: string, target: string | boolean): void {
+  if (typeof target === 'string') {
+    writeFileSync(target, content);
+    console.log(`Exported to ${target}`);
+  } else {
+    console.log(content);
+  }
+}
+
+// プログラム定義
 const program = new Command();
 
-program
-  .name('ccsetting')
-  .description('Visualize .claude configuration files')
-  .version('0.2.0');
+// 共通オプションを Command に追加するヘルパー
+function addCommonOptions(cmd: Command): Command {
+  return cmd
+    .option('-g, --global', 'Show global scope only')
+    .option('-p, --project', 'Show project scope only')
+    .option('-a, --all', 'Show all scopes (default)')
+    .option('-d, --dir <directory>', 'Target directory', process.cwd())
+    .option('-j, --json [file]', 'Output as JSON (optionally to file)')
+    .option('-m, --markdown [file]', 'Output as Markdown (optionally to file)');
+}
 
-program
+addCommonOptions(program
+  .name('ccpeek')
+  .description('Visualize .claude configuration files')
+  .version(version));
+
+// show コマンド（デフォルト）
+const showCmd = program
   .command('show', { isDefault: true })
   .description('Show the full configuration')
-  .option('-s, --summary', 'Show summary only')
-  .option('-d, --dir <directory>', 'Target directory', process.cwd())
-  .option('-j, --json <file>', 'Export to JSON file')
-  .option('-m, --markdown <file>', 'Export to Markdown file')
-  .action((options) => {
-    const config = scanClaudeConfig(options.dir);
+  .option('-s, --summary', 'Show summary only');
+addCommonOptions(showCmd)
+  .action((options, command) => {
+    const { scope, dir, json, markdown } = resolveOptions(command);
+    const config = scanClaudeConfig(dir);
+    const filtered = filterConfigByScope(config, scope);
 
-    if (options.json) {
-      const jsonContent = exportToJson(config);
-      writeFileSync(options.json, jsonContent);
-      console.log(`Exported to ${options.json}`);
+    if (json) {
+      outputOrWrite(exportToJson(filtered), json);
       return;
     }
-
-    if (options.markdown) {
-      const markdownContent = exportToMarkdown(config);
-      writeFileSync(options.markdown, markdownContent);
-      console.log(`Exported to ${options.markdown}`);
+    if (markdown) {
+      outputOrWrite(exportToMarkdown(filtered), markdown);
       return;
     }
 
     if (options.summary) {
-      displaySummary(config);
+      displaySummary(filtered);
     } else {
-      displayConfig(config);
+      displayConfig(filtered);
     }
   });
 
-program
-  .command('agents')
-  .description('Show agents only (-a: all, -g: global, -p: project)')
-  .option('-d, --dir <directory>', 'Target directory', process.cwd())
-  .option('-g, --global', 'Show global agents only')
-  .option('-p, --project', 'Show project agents only')
-  .option('-a, --all', 'Show all agents (default)', true)
-  .action((options) => {
-    const config = scanClaudeConfig(options.dir);
-    const scope: Scope = options.global ? 'global' : options.project ? 'project' : 'all';
-    const filteredAgents = filterByScope(config.agents, scope);
+// リスト系サブコマンドのファクトリ
+function registerListCommand(
+  name: string,
+  description: string,
+  emoji: string,
+  getItems: (config: ClaudeConfig) => Array<{ scope: 'global' | 'project'; [key: string]: any }>,
+  displayItem: (item: any, scopeBadge: string) => void,
+) {
+  const cmd = program
+    .command(name)
+    .description(description);
+  addCommonOptions(cmd)
+    .action((_opts: any, command: Command) => {
+      const { scope, dir, json } = resolveOptions(command);
+      const config = scanClaudeConfig(dir);
+      const items = filterByScope(getItems(config), scope);
 
-    if (filteredAgents.length === 0) {
-      console.log('No agents found');
-      return;
-    }
-
-    console.log(chalk.bold.yellow(`\n🤖 Agents (${filteredAgents.length})\n`));
-    for (const agent of filteredAgents) {
-      const scopeBadge = scope === 'all' ? chalk.dim(`[${agent.scope}] `) : '';
-      console.log(chalk.green(`• ${scopeBadge}${agent.metadata.name}`));
-      console.log(chalk.white(`  ${agent.metadata.description}`));
-      console.log(chalk.cyan(`  ${agent.file}\n`));
-    }
-  });
-
-program
-  .command('skills')
-  .description('Show skills only (-a: all, -g: global, -p: project)')
-  .option('-d, --dir <directory>', 'Target directory', process.cwd())
-  .option('-g, --global', 'Show global skills only')
-  .option('-p, --project', 'Show project skills only')
-  .option('-a, --all', 'Show all skills (default)', true)
-  .action((options) => {
-    const config = scanClaudeConfig(options.dir);
-    const scope: Scope = options.global ? 'global' : options.project ? 'project' : 'all';
-    const filteredSkills = filterByScope(config.skills, scope);
-
-    if (filteredSkills.length === 0) {
-      console.log('No skills found');
-      return;
-    }
-
-    console.log(chalk.bold.yellow(`\n✨ Skills (${filteredSkills.length})\n`));
-    for (const skill of filteredSkills) {
-      const scopeBadge = scope === 'all' ? chalk.dim(`[${skill.scope}] `) : '';
-      console.log(chalk.green(`• ${scopeBadge}${skill.metadata.name}`));
-      console.log(chalk.white(`  ${skill.metadata.description}`));
-      console.log(chalk.cyan(`  ${skill.file}\n`));
-    }
-  });
-
-program
-  .command('rules')
-  .description('Show rules only (-a: all, -g: global, -p: project)')
-  .option('-d, --dir <directory>', 'Target directory', process.cwd())
-  .option('-g, --global', 'Show global rules only')
-  .option('-p, --project', 'Show project rules only')
-  .option('-a, --all', 'Show all rules (default)', true)
-  .action((options) => {
-    const config = scanClaudeConfig(options.dir);
-    const scope: Scope = options.global ? 'global' : options.project ? 'project' : 'all';
-    const filteredRules = filterByScope(config.rules, scope);
-
-    if (filteredRules.length === 0) {
-      console.log('No rules found');
-      return;
-    }
-
-    console.log(chalk.bold.yellow(`\n📜 Rules (${filteredRules.length})\n`));
-    for (const rule of filteredRules) {
-      const scopeBadge = scope === 'all' ? chalk.dim(`[${rule.scope}] `) : '';
-      console.log(chalk.cyan(`• ${scopeBadge}${rule.file}`));
-      if (rule.metadata.paths && rule.metadata.paths.length > 0) {
-        console.log(chalk.white(`  Applies to: ${rule.metadata.paths.join(', ')}\n`));
+      if (json) {
+        outputOrWrite(JSON.stringify(items, null, 2), json);
+        return;
       }
+
+      if (items.length === 0) {
+        console.log(`No ${name} found`);
+        return;
+      }
+
+      console.log(chalk.bold.yellow(`\n${emoji} ${name.charAt(0).toUpperCase() + name.slice(1)} (${items.length})\n`));
+      for (const item of items) {
+        const badge = scope === 'all' ? chalk.dim(`[${item.scope}] `) : '';
+        displayItem(item, badge);
+      }
+    });
+}
+
+registerListCommand('agents', 'Show agents', '\u{1F916}',
+  (c) => c.agents,
+  (a, badge) => {
+    console.log(chalk.green(`\u2022 ${badge}${a.metadata.name}`));
+    console.log(chalk.white(`  ${a.metadata.description}`));
+    console.log(chalk.cyan(`  ${a.file}\n`));
+  });
+
+registerListCommand('skills', 'Show skills', '\u2728',
+  (c) => c.skills,
+  (s, badge) => {
+    console.log(chalk.green(`\u2022 ${badge}${s.metadata.name}`));
+    console.log(chalk.white(`  ${s.metadata.description}`));
+    console.log(chalk.cyan(`  ${s.file}\n`));
+  });
+
+registerListCommand('rules', 'Show rules', '\u{1F4DC}',
+  (c) => c.rules,
+  (r, badge) => {
+    console.log(chalk.cyan(`\u2022 ${badge}${r.file}`));
+    if (r.metadata.paths && r.metadata.paths.length > 0) {
+      console.log(chalk.white(`  Applies to: ${r.metadata.paths.join(', ')}\n`));
     }
   });
 
-program
+// settings コマンド（構造が異なるため個別定義）
+const settingsCmd = program
   .command('settings')
-  .description('Show settings only (-a: all, -g: global, -p: project)')
-  .option('-d, --dir <directory>', 'Target directory', process.cwd())
-  .option('-g, --global', 'Show global settings only')
-  .option('-p, --project', 'Show project settings only')
-  .option('-a, --all', 'Show all settings (default)', true)
-  .action((options) => {
-    const config = scanClaudeConfig(options.dir);
-    const scope: Scope = options.global ? 'global' : options.project ? 'project' : 'all';
+  .description('Show settings');
+addCommonOptions(settingsCmd)
+  .action((_opts: any, command: Command) => {
+    const { scope, dir, json } = resolveOptions(command);
+    const config = scanClaudeConfig(dir);
+    const filtered = filterConfigByScope(config, scope);
 
-    console.log(chalk.bold.cyan('\n⚙️  Settings\n'));
-
-    // グローバル設定
-    if ((scope === 'global' || scope === 'all') && config.globalSettings) {
-      console.log(chalk.bold.yellow('🌍 Global Settings'));
-      displaySettings(config.globalSettings, '  ');
-      console.log();
-    } else if (scope === 'global' && !config.globalSettings) {
-      console.log(chalk.dim('🌍 Global Settings: Not found\n'));
+    if (json) {
+      const settingsObj: Record<string, any> = {};
+      if (filtered.globalSettings) settingsObj.global = filtered.globalSettings;
+      if (filtered.projectSettings) settingsObj.project = filtered.projectSettings;
+      outputOrWrite(JSON.stringify(settingsObj, null, 2), json);
+      return;
     }
 
-    // プロジェクト設定
-    if ((scope === 'project' || scope === 'all') && config.projectSettings) {
-      console.log(chalk.bold.yellow('📁 Project Settings'));
-      displaySettings(config.projectSettings, '  ');
+    console.log(chalk.bold.cyan('\n\u2699\uFE0F  Settings\n'));
+
+    if ((scope === 'global' || scope === 'all') && filtered.globalSettings) {
+      console.log(chalk.bold.yellow('\u{1F30D} Global Settings'));
+      displaySettings(filtered.globalSettings, '  ');
       console.log();
-    } else if (scope === 'project' && !config.projectSettings) {
-      console.log(chalk.dim('📁 Project Settings: Not found\n'));
+    } else if (scope === 'global' && !filtered.globalSettings) {
+      console.log(chalk.dim('\u{1F30D} Global Settings: Not found\n'));
+    }
+
+    if ((scope === 'project' || scope === 'all') && filtered.projectSettings) {
+      console.log(chalk.bold.yellow('\u{1F4C1} Project Settings'));
+      displaySettings(filtered.projectSettings, '  ');
+      console.log();
+    } else if (scope === 'project' && !filtered.projectSettings) {
+      console.log(chalk.dim('\u{1F4C1} Project Settings: Not found\n'));
     }
   });
 

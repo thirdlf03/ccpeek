@@ -1,4 +1,4 @@
-# ccsetting
+# ccpeek
 
 .claude configuration を可視化するCLIツール
 
@@ -6,49 +6,56 @@
 
 ```bash
 # npxで直接実行
-npx ccsetting
+npx ccpeek
 
 # またはグローバルインストール
-npm install -g ccsetting
+npm install -g ccpeek
 ```
 
 ## 使い方
 
 ```bash
 # 全設定を表示
-ccsetting
+ccpeek
 # または
-ccsetting show
+ccpeek show
 
 # サマリーのみ表示
-ccsetting show --summary
+ccpeek show --summary
+
+# スコープフラグ（トップレベルで使用可能）
+ccpeek -p              # プロジェクト設定のみ表示
+ccpeek -g              # グローバル設定のみ表示
 
 # エージェント一覧のみ
-ccsetting agents              # 全エージェント（グローバル＋プロジェクト）
-ccsetting agents --global     # グローバルエージェントのみ
-ccsetting agents --project    # プロジェクトエージェントのみ
+ccpeek agents              # 全エージェント（グローバル＋プロジェクト）
+ccpeek agents --global     # グローバルエージェントのみ
+ccpeek agents --project    # プロジェクトエージェントのみ
 
 # スキル一覧のみ
-ccsetting skills              # 全スキル（グローバル＋プロジェクト）
-ccsetting skills --global     # グローバルスキルのみ
-ccsetting skills --project    # プロジェクトスキルのみ
+ccpeek skills              # 全スキル（グローバル＋プロジェクト）
+ccpeek skills --global     # グローバルスキルのみ
+ccpeek skills --project    # プロジェクトスキルのみ
 
 # ルール一覧のみ
-ccsetting rules               # 全ルール（グローバル＋プロジェクト）
-ccsetting rules --global      # グローバルルールのみ
-ccsetting rules --project     # プロジェクトルールのみ
+ccpeek rules               # 全ルール（グローバル＋プロジェクト）
+ccpeek rules --global      # グローバルルールのみ
+ccpeek rules --project     # プロジェクトルールのみ
 
 # 設定のみ
-ccsetting settings            # グローバル＋プロジェクト設定
-ccsetting settings --global   # グローバル設定のみ
-ccsetting settings --project  # プロジェクト設定のみ
+ccpeek settings            # グローバル＋プロジェクト設定
+ccpeek settings --global   # グローバル設定のみ
+ccpeek settings --project  # プロジェクト設定のみ
 
 # 特定のディレクトリを指定
-ccsetting --dir /path/to/project
+ccpeek --dir /path/to/project
 
 # エクスポート機能
-ccsetting show --json config.json     # JSON形式でエクスポート
-ccsetting show --markdown config.md   # Markdown形式でエクスポート
+ccpeek --json                     # JSON形式で標準出力
+ccpeek --json config.json         # JSON形式でファイルにエクスポート
+ccpeek --markdown config.md       # Markdown形式でファイルにエクスポート
+ccpeek agents --json              # エージェントのみJSON出力
+ccpeek agents --json agents.json  # エージェントのみJSONファイルにエクスポート
 ```
 
 ### スコープフラグ
@@ -64,7 +71,7 @@ ccsetting show --markdown config.md   # Markdown形式でエクスポート
 ## 出力例
 
 ```bash
-$ ccsetting
+$ ccpeek
 
 📋 Claude Code Configuration
 
@@ -111,6 +118,8 @@ $ ccsetting
 - ✅ スキル一覧
 - ✅ ルール一覧
 - ✅ Permissions/Hooks/Plugins の要約表示
+- ✅ JSON/Markdown エクスポート（全コマンド対応）
+- ✅ スコープフィルタリング（グローバル/プロジェクト）
 
 ## 開発
 
