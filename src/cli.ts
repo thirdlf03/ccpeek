@@ -53,7 +53,7 @@ program
 
 program
   .command('agents')
-  .description('Show agents only')
+  .description('Show agents only (-a: all, -g: global, -p: project)')
   .option('-d, --dir <directory>', 'Target directory', process.cwd())
   .option('-g, --global', 'Show global agents only')
   .option('-p, --project', 'Show project agents only')
@@ -79,7 +79,7 @@ program
 
 program
   .command('skills')
-  .description('Show skills only')
+  .description('Show skills only (-a: all, -g: global, -p: project)')
   .option('-d, --dir <directory>', 'Target directory', process.cwd())
   .option('-g, --global', 'Show global skills only')
   .option('-p, --project', 'Show project skills only')
@@ -105,7 +105,7 @@ program
 
 program
   .command('rules')
-  .description('Show rules only')
+  .description('Show rules only (-a: all, -g: global, -p: project)')
   .option('-d, --dir <directory>', 'Target directory', process.cwd())
   .option('-g, --global', 'Show global rules only')
   .option('-p, --project', 'Show project rules only')
@@ -132,7 +132,7 @@ program
 
 program
   .command('settings')
-  .description('Show settings only (global and project)')
+  .description('Show settings only (-a: all, -g: global, -p: project)')
   .option('-d, --dir <directory>', 'Target directory', process.cwd())
   .option('-g, --global', 'Show global settings only')
   .option('-p, --project', 'Show project settings only')
